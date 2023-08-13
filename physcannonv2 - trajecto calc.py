@@ -34,11 +34,18 @@ adj = 0
 hyp = 0
 tan = 0
 theta = 0
+
+rectdraw_bounds = [False,False]
+rectdraw_rect = False
+rectdraw_present = False
+
 status_timer = FPS*50
 g = -9.8
 
 target_present = False
 targetmarker_present = False
+
+draw_mode = False
 
 space = munk.Space()
 space.gravity = (0,-g)
@@ -108,7 +115,8 @@ class Projectile:
     def remove(self):
         space.remove(self.body, self.shape)
         
-class target_marker:
+class Target_marker:
+    
     
     def __init__(self, pos, image):
         self.pos = pos
@@ -122,13 +130,39 @@ class target_marker:
             self.surface = pg.image.load(target_image)
             self.rect = self.image.get_rect(center = pos)
 
+class Obstacle:
+    
+    def __init__(self, pos):
+        self.pos = pos
+        self.xpos = pos[0]
+        self.ypos = pos[1]
+        
+    def spawn(self, space):
+        
+        global rectdraw_bounds
+        
+        self.pos = rectdraw_bounds[0]
+        self.body = munk.Body(body_type = munk.Body.STATIC)
+        self.sizex = rectdraw_bounds[1][0] - rectdraw_bounds[0][0]
+        self.sizey = rectdraw_bounds[1][1] - rectdraw_bounds[0][1]
+        self.size = (self.sizex, self.sizey)
+        self.body.position = (self.pos[0]+self.sizex/2, self.pos[1] +self.sizey/2)
+        self.shape = munk.Poly.create_box(self.body, self.size)
+        self.shape.elasticity = 0.5
+        self.shape.friction = 0.5
+        print(f"rect pos = {self.body.position}")
+        space.add(self.body, self.shape)
+        
+    def remove(self):
+        space.remove(self.body, self.shape)
         
         
         
         
 cannon = Cannon((70, 685), cannon_image) #70, 685 for lower left corner placement
 bullet1 = Projectile("bullet", cannon.pos, None)
-targetmarker = target_marker((100,100), target_image)
+targetmarker = Target_marker((100,100), target_image)
+rect_obstacle = None
 
 print(f"mass = {bullet1.shape.mass}")
 
@@ -157,7 +191,14 @@ def munkdraw(space, window, draw_options):
     global adj
     global hyp
     
-    draw_trajectory(hyp)
+    if not draw_mode:
+        draw_trajectory(hyp)
+    
+    if rectdraw_bounds[0] and draw_mode:
+        
+        rectdraw_rect = pg.Rect(rectdraw_bounds[0][0], rectdraw_bounds[0][1], pg.mouse.get_pos()[0] - rectdraw_bounds[0][0], pg.mouse.get_pos()[1] - rectdraw_bounds[0][1])
+        pg.draw.rect(screen, (0,0,0), rectdraw_rect)
+        
     
     #draw text for triangle/cursor/6debug info
     opptext_surface = base_font.render(f"{opp/10} m", True, (150,150,150))
@@ -281,6 +322,10 @@ def calc_trajectory_lowangle(targetx, targety):
             tgt = (targetx, targety)
             #pg.draw.circle(screen, (50,150,200,200), (aim[0], aim[1]), 1) un-comment this to check the scan arc for debugging
             
+            
+            #code for obstacle detection here. If trajectory hits an obstacle before the target, break from this loop and increase the angle. On first iteration that does not hit an aobstacle, lower maxvel until the trajectory hits the target.
+            
+            
             if aim == tgt:
                 #this section draws the calculated trajectory. un-comment if ya don't want it.
                 for r2 in range(cannon.xpos, WIDTH - 30, 1):
@@ -339,13 +384,14 @@ def draw_trajectory(impulse):
   # print(f"r = {ra}, h = {he}")
 
     
+
     
 
     
 ###############################################################################
 
 create_boundaries(space, WIDTH, HEIGHT)
-#create_brick_wall(0.6, (35, 20))
+create_brick_wall(0.6, (35, 20))
 #create_basiclevel(space, WIDTH , HEIGHT)
 
 
@@ -361,7 +407,40 @@ while run:
         if event.type == pg.MOUSEBUTTONDOWN:
             
             if event.button == 1:
-                if not target_present: 
+                #--------------------------------------------------------------
+                if draw_mode == True: #this block gets input for drawing a custom rectangle obstacle in the space
+                    
+                    if rectdraw_bounds[0] and rectdraw_bounds[1]: #click to start new rectangle
+                        
+                        pass
+                        
+                    elif rectdraw_bounds[0]: #2nd click to finish drawing obstacle
+                        
+                        rectdraw_bounds[1] = pg.mouse.get_pos()
+                        rect_obstacle = Obstacle(rectdraw_bounds[0])
+                        rectdraw_present = True
+                        print(f"rect pos = {rect_obstacle.pos}")
+                        
+                        rect_obstacle.spawn(space)
+                        
+                        rectdraw_bounds = [False, False]
+                        draw_mode = False
+                    
+                    elif not rectdraw_bounds[0]: #1st click to start drawing obstacle
+                        
+                        rectdraw_bounds = [False, False]
+                        
+                        if rect_obstacle:
+                            if rectdraw_present:
+                                rect_obstacle.remove()
+                                rectdraw_present = False
+                            
+                        rectdraw_bounds[0] = pg.mouse.get_pos()
+                    
+                    
+                    print(f"rect bounds = {rectdraw_bounds}")
+                #--------------------------------------------------------------
+                elif not target_present: 
                      
                     bullet1 = Projectile("bullet", cannon.pos, None) #re initializes the bullet object to reset its orientation and properties. Shot trajectory will break without doing this.
                     bullet = bullet1.spawn(space, cannon.pos, theta, (adj, -opp))
@@ -398,7 +477,7 @@ while run:
                
                 if not target_present:
                     
-                    targetmarker = target_marker(pg.mouse.get_pos(), target_image)
+                    targetmarker = Target_marker(pg.mouse.get_pos(), target_image)
                     
                     target_present = True
                     targetmarker_present = True
@@ -426,6 +505,20 @@ while run:
                     
                     target_present = False
                     targetmarker_present = False
+                
+            if event.key == pg.K_r:
+                
+                if not draw_mode:
+                    draw_mode = True
+                elif draw_mode:
+                    rectdraw_bounds = [False, False]
+                    draw_mode = False
+                
+                
+                print(f"draw mode = {draw_mode}")
+                
+                
+                    
                     
                     
             
