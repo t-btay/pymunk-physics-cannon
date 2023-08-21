@@ -20,7 +20,7 @@ pg.init()
 
 munk.pygame_util.positive_y_is_up = False
 RES = WIDTH, HEIGHT = 1000, 750
-FPS = 60
+FPS = 40
 
 
 screen = pg.display.set_mode((RES))
@@ -219,10 +219,10 @@ def munkdraw(space, window, draw_options):
 def create_boundaries(space, width, height):
     
     rects = [
-        [(width/2, height - 10), (width, 20)],
-        [(width/2, 10), (width, 20)],
-        [(10, height/2), (20, height)],
-        [(width - 10, height/2), (20, height)]
+        [(width/2, height - 10), (width, 20)], #ground
+        [(width/2, 10), (width, 20)], #ceiling
+        [(10, height/2), (20, height)], #left wall
+        [(width - 10, height/2), (20, height)] #right wall
     ]
     
     for pos, size in rects:
@@ -303,58 +303,72 @@ def calc_trajectory_lowangle(targetx, targety):
     
     print("auto aiming...")
     
+    r = 70
+    
     obstacle_detected = False
-    angle_retest = False
+    vel_retest = False
+    
+    obstshape = None
+    trajcolor = "orange"
     
     finished = False
 
-    maxvel = 200 #max initial velocity, starts at max value then automaticall turn down if needed.
+    maxvel = 160 #max initial velocity, starts at max value then automaticall turn down if needed.
     
-    for theta in range(-300,1800):
+    for theta in range(-300,2700): #loops through increasing values for the angle of the cannon to find the correct firing angle
         
             
-        radians = math.radians(theta/20)
+        radians = math.radians(theta/30)
         xvel = maxvel*cos(radians)
         yvel = maxvel*sin(radians)
         
-        
-        for r in range(0, WIDTH - 30, 1):
+
+        for r in range(70, WIDTH - 25, 1): #tests the entire trajectory of the current firing angle and inital velocity by looping through every horizontal value and checking the y value for it as a function of t(time), using 2d kinematics
             
+            #try:
             t = r/(maxvel*cos(radians)) - cannon.xpos/(maxvel*cos(radians))
             h = -(maxvel*sin(radians)*t + 0.5*(g*t**2)) + cannon.ypos
             
             aim = (r,round(h))
             tgt = (targetx, targety)
-            #pg.draw.circle(screen, (50,150,200,200), (aim[0], aim[1]), 1) un-comment this to check the scan arc for debugging
-            
-            pq = space.point_query_nearest((r,h), 5, munk.ShapeFilter())
-            #code for obstacle detection here. If trajectory hits an obstacle before the target, break from this loop and increase the angle. On first iteration that does not hit an aobstacle, lower maxvel until the trajectory hits the target.
+                #pg.draw.circle(screen, (50,150,200,200), (aim[0], aim[1]), 1) un-comment this to check the scan arc for debugging
+            #except:
+                #print(f"error|div by zero| maxvel: {maxvel}")
+                #continue
+           
+            if not r%5: #draws the testing "cone" that the cannon rotates through. using the % makes it partially transparent
+                pg.draw.circle(screen, trajcolor, (r, h), 1)
+                
 
-            
+            #code for obstacle detection here. If trajectory hits an obstacle before the target, break from this loop and increase the angle. On first iteration that does not hit an aobstacle, lower maxvel until the trajectory hits the target
             if obstacle_detected:
+                
+                pq = space.point_query_nearest((r,h), 5, munk.ShapeFilter())
                 
                 if pq:
                     
-                    if pq.shape.body.body_type:
-                        pg.draw.circle(screen, "green", (r, h), 10)
+                    if pq.shape == obstshape:
+                        pg.draw.circle(screen, "blue", (r, h), 3)
                         pg.display.update()
-                        time.sleep(.005)
-                        print("modifying trajectory...")
+                        time.sleep(.001)
+                        print("modifying angle...")
+                        print(f"shape: {obstshape}")
                         break
-                else:
                     
-                    angle_retest = True
+                    else:
+                        
+                        vel_retest = True
                     
-            
             if aim == tgt:
                 #this section draws the calculated trajectory.
                 for r2 in range(cannon.xpos, tgt[0], 1):
                     t2 = r2/(maxvel*cos(radians)) - cannon.xpos/(maxvel*cos(radians))
                     h2 = -(maxvel*sin(radians)*t2 + 0.5*(g*t2**2)) + cannon.ypos
-                    pq = space.point_query_nearest((r2,h2), 5, munk.ShapeFilter())
-                    if pq: #this condiitonal block does the initial check for obstacles on the trajectory path and gives visual feedback on the drawn trajectory appropriately. continued obstacle checking for the modified trajectory will be done by the loop one level up.
+                    pq2 = space.point_query_nearest((r2,h2), 5, munk.ShapeFilter())
+                    if pq2: #this condiitonal block does the initial check for obstacles on the trajectory path and gives visual feedback on the drawn trajectory appropriately. continued obstacle checking for the modified trajectory will be done by the loop one level up.
     
-                        if pq.shape.body.body_type:
+                        if pq2.shape.body.body_type:
+                            obstshape = pq2.shape
                             pg.draw.circle(screen, "red", (r2, h2), 4)
                             pg.display.update()
                             time.sleep(2)
@@ -393,26 +407,34 @@ def calc_trajectory_lowangle(targetx, targety):
                     
                     break
                 
-            elif angle_retest:
+            elif vel_retest:
+                
+                pq = space.point_query_nearest((r,h), 5, munk.ShapeFilter())
+                
                 if pq:
-                    if pq.shape.body.body_type:
-                        print("circumnavigating...")
-                        obstacle_detected = True
-                        angle_retest = False
-                        break
-                    else:
-                        obstacle_detected = False
-                        maxvel -= 1
+                    
+                    if pq.shape == obstshape:
                         
-                        continue
-                
-            else:
-                
-                noshot = True
-                targetmarker_present = False
+                        obstacle_detected = True
+                        vel_retest = False
+                        print("angle retest broken")
+                        break
+                    
+                    else:
+                        
+                        print(f"reducing launch velocity from {maxvel}...")
+                        obstacle_detected = False
+                        maxvel -= .005
+                        maxvel = round(maxvel, 8)
+                        time.sleep(.0001)
+                        trajcolor = "darkblue"
+                        pg.display.update()
+
                 
                 
         if finished:
+            print("finished")
+            trajcolor = "orange"
             break
         
 def draw_trajectory(impulse):
@@ -422,7 +444,7 @@ def draw_trajectory(impulse):
    vel = hyp/5
    radians = math.radians(theta)
    
-   for r in range(0, WIDTH - 65, 10):
+   for r in range(0, WIDTH - 65, 20):
        
        t = r/(vel*cos(radians))
        h = vel*sin(radians)*t + 0.5*(g*t**2)
